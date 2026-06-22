@@ -1,21 +1,27 @@
 {
-  "name": "MSavor IQ",
+  "name": "Savor IQ - Tu Chef con IA",
   "short_name": "SavorIQ",
+  "description": "Genera recetas personalizadas, analiza nutrición y planifica comidas con inteligencia artificial",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "maskable any"
     },
     {
       "src": "/web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "maskable any"
     }
   ],
   "theme_color": "#ff530b",
-  "background_color": "#ff530b",
-  "display": "standalone"
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["food", "lifestyle", "utilities"],
+  "lang": "es-ES"
 }
