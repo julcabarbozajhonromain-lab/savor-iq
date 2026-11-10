@@ -14,11 +14,17 @@
   } from 'lucide-svelte';
   import { compressAndConvertToBase64 } from '$lib/utils/image-compression';
   import { userData } from '$lib/state/user-storage.svelte';
+  import {
+    matchPeruvianDishes,
+    normalizePeruvianIngredients,
+    PERUVIAN_DISH_CATALOG
+  } from '$lib/data/peruvian-cuisine-catalog';
   import type { Recipe } from '$lib/types/ai-schemas';
 
   let activeTab: 'generator' | 'favorites' = $state('generator');
   let ingredients = $state('');
   let selectedTags: string[] = $state([]);
+  let selectedPeruvianDish: string | null = $state(null);
   let imagePreview: string | null = $state(null);
   let selectedFile: File | null = $state(null);
   let useCamera = $state(false);
@@ -27,6 +33,16 @@
   let recipes: Recipe[] = $state([]);
   let error: string | null = $state(null);
   let copiedIndex: number | null = $state(null);
+
+  let matchedPeruvian = $derived(matchPeruvianDishes(ingredients, 3));
+  let normalizedPreview = $derived(normalizePeruvianIngredients(ingredients));
+
+  const quickPeruvianCombos = [
+    { label: '🇵🇪 Arroz con Pollo', text: 'arroz, cilantro, espinaca, pollo' },
+    { label: '🥩 Lomo Saltado', text: 'carne de res, cebolla, tomate, papa' },
+    { label: '🍝 Tallarines Verdes', text: 'tallarines, espinaca, albahaca, queso fresco, pollo' },
+    { label: '🍳 Arroz Chaufa', text: 'arroz, pollo, huevo, cebolla china, sillao' }
+  ];
 
   const availableTags = [
     '⚡ < 20 min',
@@ -87,6 +103,9 @@
 
       let promptParts: string[] = [];
       if (ingredients.trim()) promptParts.push(`Ingredientes: ${ingredients.trim()}`);
+      if (selectedPeruvianDish) {
+        promptParts.push(`Plato peruano prioritario solicitado: ${selectedPeruvianDish} (incluir su receta tradicional y su versión Fit saludable)`);
+      }
       if (selectedTags.length > 0) promptParts.push(`Preferencias de cocina: ${selectedTags.join(', ')}`);
       if (userData.profile.allergies.length > 0) {
         promptParts.push(`Alergias estrictas a evitar: ${userData.profile.allergies.join(', ')}`);
@@ -297,17 +316,98 @@ ${recipe.missingIngredients && recipe.missingIngredients.length > 0 ? `💡 Ingr
 
       <!-- Input de texto -->
       {#if !useCamera}
-        <div>
-          <label for="chef-ingredients" class="block text-sm font-medium text-gray-700 mb-2">
-            ¿Qué ingredientes tienes a mano?
-          </label>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <label for="chef-ingredients" class="block text-sm font-medium text-gray-700">
+              ¿Qué ingredientes tienes a mano?
+            </label>
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-50 text-red-700 border border-red-200">
+              🇵🇪 Catálogo Perú ({PERUVIAN_DISH_CATALOG.length} platos)
+            </span>
+          </div>
           <textarea
             id="chef-ingredients"
             bind:value={ingredients}
-            placeholder="Ej: huevos, tomate, queso, pan, atún, cebolla..."
+            placeholder="Ej: arroz, cilantro, espinaca, pollo, ají amarillo..."
             class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none text-sm"
-            rows="4"
+            rows="3"
           ></textarea>
+
+          <!-- Combos rápidos de prueba peruana -->
+          <div class="space-y-1">
+            <span class="block text-[11px] font-semibold text-gray-400">
+              Prueba rápida de combinaciones peruanas:
+            </span>
+            <div class="flex flex-wrap gap-1.5">
+              {#each quickPeruvianCombos as combo}
+                <button
+                  type="button"
+                  onclick={() => {
+                    ingredients = combo.text;
+                    selectedPeruvianDish = null;
+                  }}
+                  class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-orange-50/70 hover:bg-orange-100 text-orange-800 border border-orange-200/80 transition"
+                >
+                  {combo.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          <!-- Radar Gastronómico Peruano en Tiempo Real -->
+          {#if matchedPeruvian.length > 0}
+            <div class="bg-gradient-to-br from-red-50/80 via-white to-orange-50/70 border border-red-200/80 rounded-xl p-3.5 space-y-2.5 shadow-2xs">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm">🇵🇪</span>
+                  <span class="text-xs font-bold text-red-800">
+                    Radar Gastronómico Peruano detectó:
+                  </span>
+                </div>
+                {#if normalizedPreview.translationsApplied.length > 0}
+                  <span class="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                    {normalizedPreview.translationsApplied.join(' • ')}
+                  </span>
+                {/if}
+              </div>
+
+              <div class="space-y-1.5">
+                {#each matchedPeruvian as match}
+                  {@const isSelected = selectedPeruvianDish === match.dish.name}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      selectedPeruvianDish = isSelected ? null : match.dish.name;
+                    }}
+                    class="w-full text-left p-2.5 rounded-lg border transition flex items-start justify-between gap-2 {
+                      isSelected
+                        ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                        : 'bg-white/90 hover:bg-red-50/50 border-red-100 text-gray-800'
+                    }"
+                  >
+                    <div class="space-y-0.5">
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-xs font-bold">{match.dish.name}</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded font-semibold {
+                          isSelected ? 'bg-red-500 text-white' : 'bg-orange-100 text-orange-700'
+                        }">
+                          {match.dish.region}
+                        </span>
+                      </div>
+                      <p class="text-[11px] {isSelected ? 'text-red-100' : 'text-gray-500'}">
+                        Coincide con: <strong>{[...match.matchedCore, ...match.matchedSecondary].join(', ')}</strong>
+                      </p>
+                    </div>
+                    <span class="text-[10px] font-bold shrink-0 px-2 py-1 rounded-md {
+                      isSelected ? 'bg-white text-red-600' : 'bg-red-50 text-red-700'
+                    }">
+                      {isSelected ? '✓ Priorizado' : 'Elegir plato'}
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
       {:else}
         <!-- Input de cámara -->

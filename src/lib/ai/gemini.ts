@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getProjectEnv } from './env-reader';
 import { extractAndParseJson } from './json-parser';
+import { buildPeruvianCulinaryContextForChef } from '$lib/data/peruvian-cuisine-catalog';
 import {
   NutritionAnalysisSchema,
   RecipesResponseSchema,
@@ -240,15 +241,15 @@ async function callGeminiWithFallback(
 export async function analyzePlateWithGemini(imageBase64: string): Promise<NutritionAnalysis> {
   const { data, mimeType } = cleanBase64(imageBase64);
 
-  const prompt = `Actúa como un nutricionista y dietista clínico experto.
+  const prompt = `Actúa como un nutricionista y dietista clínico experto especializado en gastronomía peruana e internacional (Contexto: Perú 🇵🇪).
 Analiza la imagen de este plato de comida con precisión profesional:
-1. Identifica el nombre del plato principal y todos los alimentos/ingredientes visibles.
-2. Estima el tamaño de la porción y calcula con realismo:
+1. Identifica el nombre exacto del plato principal (reconociendo platos peruanos como Arroz con Pollo, Lomo Saltado, Arroz Chaufa, Ceviche, Ají de Gallina, Tallarines Verdes, Tallarín Saltado, Causa Limeña, Papa a la Huancaína, Seco con Frejoles, Aguadito, Lentejitas con arroz, Pollo a la Brasa, Caldo de Gallina, Sangrecita, etc.) y todos los alimentos/guarniciones visibles usando vocabulario peruano (culantro, palta, choclo, camote, alverjitas, yuca, zarza criolla).
+2. Estima el tamaño de la porción peruana real y calcula con realismo:
    - Calorías totales (estimatedCalories)
    - Macronutrientes en gramos: proteína (protein), carbohidratos (carbs), grasa (fat), fibra (fiber).
-3. Evalúa la calidad nutricional con un healthScore del 1 al 10 fundamentado en balance calórico, fibra, calidad de proteínas y grasas.
-4. Redacta un veredicto nutricional profesional y conciso.
-5. Ofrece de 2 a 3 sugerencias prácticas para balancear o mejorar este plato.
+3. Evalúa la calidad nutricional con un healthScore del 1 al 10 fundamentado en balance calórico, fibra, calidad de proteínas y control de doble carbohidrato (ej. arroz + papa).
+4. Redacta un veredicto nutricional profesional, cercano y conciso.
+5. Ofrece de 2 a 3 sugerencias prácticas adaptadas a Perú (ej. agregar zarza criolla, moderar la porción de arroz, reemplazar fritura por Air Fryer).
 
 Esquema JSON obligatorio:
 {
@@ -288,17 +289,20 @@ export async function generateRecipesFromImageWithGemini(
   const extra = extraIngredients
     ? `Ingredientes adicionales aportados por el usuario: "${extraIngredients}".`
     : '';
+  const peruvianContext = buildPeruvianCulinaryContextForChef(extraIngredients || '');
 
-  const prompt = `Actúa como un Chef profesional enfocado en cocina sostenible y aprovechamiento de despensa.
+  const prompt = `Actúa como un Chef peruano experto en gastronomía criolla, casera, andina, chifa y saludable.
 Mira la imagen: identifica todos los alimentos e ingredientes disponibles visibles.
 ${extra}
-Diseña de 2 a 3 recetas prácticas, deliciosas y realistas que aprovechen al máximo los ingredientes visibles.
+${peruvianContext}
+
+Diseña de 2 a 3 recetas auténticas, deliciosas y realistas que aprovechen al máximo los ingredientes visibles priorizando el recetario peruano cuando los ingredientes coincidan (ej. Arroz con Pollo, Aguadito, Lomo/Pollo Saltado, Chaufa, Tallarines Verdes, Causa, Sudado, etc.).
 Para cada receta incluye:
-- name: Nombre del plato
+- name: Nombre del plato (destacando su identidad peruana si aplica)
 - prepTime: Tiempo estimado de preparación (ej: "25 min")
-- ingredients: Lista de ingredientes con cantidades aproximadas
-- instructions: Pasos numerados claros y concisos
-- missingIngredients: Ingredientes adicionales opcionales o especias sugeridas
+- ingredients: Lista de ingredientes con cantidades aproximadas en términos peruanos
+- instructions: Pasos claros y concisos SIN número al inicio (incluyendo la técnica del aderezo peruano)
+- missingIngredients: Ingredientes adicionales opcionales para completar el aderezo peruano (ej: ají amarillo, sillao, kión, alverjitas, culantro)
 
 Esquema JSON obligatorio:
 {
@@ -307,7 +311,7 @@ Esquema JSON obligatorio:
       "name": "Nombre de la receta",
       "prepTime": "20 min",
       "ingredients": ["ingrediente 1", "ingrediente 2"],
-      "instructions": ["Paso 1...", "Paso 2..."],
+      "instructions": ["Paso...", "Paso..."],
       "missingIngredients": []
     }
   ]
@@ -325,30 +329,35 @@ Esquema JSON obligatorio:
 }
 
 /**
- * Genera recetas a partir de texto con Gemini Flash
+ * Genera recetas a partir de texto con Gemini Flash + Motor RAG Gastronómico Peruano
  */
 export async function generateRecipesWithGeminiText(
   ingredientsText: string
 ): Promise<RecipesResponse> {
-  const prompt = `Actúa como un Chef profesional enfocado en cocina creativa y aprovechamiento de despensa.
-Con estos ingredientes disponibles: "${ingredientsText}".
-Genera de 2 a 3 recetas fáciles, deliciosas y nutritivas.
-Para cada receta incluye:
-- name: Nombre del plato
-- prepTime: Tiempo de preparación estimado (ej: "20 min")
-- ingredients: Lista de ingredientes con cantidades aproximadas
-- instructions: Pasos numerados claros y detallados
-- missingIngredients: Ingredientes adicionales opcionales o especias recomendadas
+  const peruvianContext = buildPeruvianCulinaryContextForChef(ingredientsText);
+
+  const prompt = `Actúa como un Chef peruano profesional experto en gastronomía peruana (criolla, casera de diario, chifa, marina, andina y versión Fit saludable).
+Con estos ingredientes disponibles del usuario: "${ingredientsText}".
+${peruvianContext}
+
+Genera de 2 a 3 recetas fáciles, deliciosas y nutritivas:
+- Si los ingredientes coinciden con platos del catálogo peruano (por ejemplo: arroz + culantro/cilantro + espinaca + pollo -> "Arroz con Pollo Peruano" y "Aguadito de Pollo", o versión Fit), DEBES priorizar esos platos peruanos auténticos explicando su aderezo real.
+- Para cada receta incluye:
+  • name: Nombre del plato
+  • prepTime: Tiempo de preparación estimado (ej: "25 min")
+  • ingredients: Lista de ingredientes con cantidades aproximadas usando nombres peruanos (culantro, palta, sillao, kión, alverjitas, choclo, camote, etc.)
+  • instructions: Pasos claros y detallados (no pongas "1." al inicio de cada texto)
+  • missingIngredients: Ingredientes opcionales del aderezo peruano que elevarían el plato (ej: ají amarillo, cerveza negra, alverjitas, pimiento, sillao)
 
 Esquema JSON obligatorio:
 {
   "recipes": [
     {
       "name": "Nombre de la receta",
-      "prepTime": "20 min",
+      "prepTime": "25 min",
       "ingredients": ["ingrediente 1", "ingrediente 2"],
-      "instructions": ["Paso 1...", "Paso 2..."],
-      "missingIngredients": []
+      "instructions": ["Sofríe la cebolla con el ajo y el ají amarillo...", "Incorpora el licuado de culantro y espinaca..."],
+      "missingIngredients": ["ají amarillo", "alverjitas"]
     }
   ]
 }`;
@@ -358,14 +367,14 @@ Esquema JSON obligatorio:
 }
 
 /**
- * Genera el plan semanal completo de 7 días y la lista de compras con Gemini Flash
+ * Genera el plan semanal completo de 7 días y la lista de compras con Gemini Flash adaptado a Perú
  */
 export async function generateMealPlanWithGemini(
   preferences?: string,
   dietaryRestrictions?: string
 ): Promise<MealPlan> {
-  const prompt = `Eres un nutricionista experto. Genera un plan de comidas semanal completo de 7 días (Lunes a Domingo).
-Preferencias del usuario: ${preferences || 'Sin preferencias específicas'}
+  const prompt = `Eres un nutricionista clínico experto en gastronomía peruana saludable (Contexto: Perú 🇵🇪). Genera un plan de comidas semanal completo de 7 días (Lunes a Domingo) con platos peruanos caseros, ricos, saludables y fáciles de preparar con ingredientes de mercados y bodegas de Perú (ej: quinua, palta, camote, choclo, lentejitas, frejoles, pollo, pescado, huevos, queso fresco, culantro, espinaca, avena, frutas de estación).
+Preferencias del usuario: ${preferences || 'Comida peruana casera equilibrada'}
 Restricciones dietéticas: ${dietaryRestrictions || 'Ninguna'}
 
 Responde estrictamente con este formato JSON:
@@ -382,12 +391,12 @@ Responde estrictamente con este formato JSON:
     }
   ],
   "shoppingList": {
-    "proteins": ["pollo 1kg"],
-    "vegetables": ["tomates 6 unidades"],
-    "grains": ["arroz 1kg"],
-    "dairy": ["leche 1L"],
-    "fruits": ["manzanas 6 unidades"],
-    "other": ["aceite de oliva"]
+    "proteins": ["pechuga de pollo 1kg", "filete de pescado 500g", "huevos 15 unidades"],
+    "vegetables": ["culantro 1 atado", "espinaca 1 atado", "ají amarillo 4 unidades", "tomates 6 unidades", "cebolla roja 1kg"],
+    "grains": ["arroz 1kg", "quinua 500g", "lentejas 500g", "camote 1kg"],
+    "dairy": ["queso fresco 250g", "yogurt griego o leche"],
+    "fruits": ["palta fuerte 3 unidades", "limón peruano 500g", "plátano de seda 6 unidades"],
+    "other": ["aceite de oliva", "sillao", "kión"]
   },
   "weeklyNutrition": {
     "totalCalories": 9100,

@@ -1,6 +1,7 @@
 import Groq from 'groq-sdk';
 import { getProjectEnv } from './env-reader';
 import { extractAndParseJson } from './json-parser';
+import { buildPeruvianCulinaryContextForChef } from '$lib/data/peruvian-cuisine-catalog';
 import {
   NutritionAnalysisSchema,
   RecipesResponseSchema,
@@ -38,11 +39,14 @@ function cleanBase64Url(base64: string): string {
  */
 export async function generateRecipesWithGroqText(ingredientsText: string): Promise<RecipesResponse> {
   const client = getGroqClient();
+  const peruvianContext = buildPeruvianCulinaryContextForChef(ingredientsText);
+
   const completion = await client.chat.completions.create({
     messages: [
       {
         role: 'system',
-        content: `Eres un chef profesional. Genera de 2 a 3 recetas creativas con los ingredientes provistos.
+        content: `Eres un chef peruano experto en gastronomía peruana (criolla, casera, chifa, marina, andina y versión Fit). Genera de 2 a 3 recetas auténticas con los ingredientes provistos.
+${peruvianContext}
 Responde estrictamente en formato JSON válido con esta forma:
 {
   "recipes": [
@@ -58,7 +62,7 @@ Responde estrictamente en formato JSON válido con esta forma:
       },
       {
         role: 'user',
-        content: `Ingredientes disponibles: "${ingredientsText}". Crea las recetas.`
+        content: `Ingredientes disponibles: "${ingredientsText}". Crea las recetas priorizando los platos del catálogo peruano detectados.`
       }
     ],
     model: 'llama-3.3-70b-versatile',
