@@ -258,7 +258,7 @@ ${recipe.missingIngredients && recipe.missingIngredients.length > 0 ? `💡 Ingr
               <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-1">Instrucciones:</p>
               <ol class="list-decimal list-inside text-xs text-gray-700 space-y-1">
                 {#each recipe.instructions as step}
-                  <li class="leading-relaxed">{step}</li>
+                  <li class="leading-relaxed">{step.replace(/^(?:paso\s*)?\d+[\.\)\-\:\s]+/i, '')}</li>
                 {/each}
               </ol>
             </div>
@@ -481,7 +481,7 @@ ${recipe.missingIngredients && recipe.missingIngredients.length > 0 ? `💡 Ingr
             <h5 class="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Pasos de preparación:</h5>
             <ol class="list-decimal list-inside text-sm text-gray-700 space-y-2">
               {#each recipe.instructions as instruction}
-                <li class="leading-relaxed">{instruction}</li>
+                <li class="leading-relaxed">{instruction.replace(/^(?:paso\s*)?\d+[\.\)\-\:\s]+/i, '')}</li>
               {/each}
             </ol>
           </div>
