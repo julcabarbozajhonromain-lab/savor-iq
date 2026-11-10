@@ -1,3 +1,5 @@
+import type { RecipesResponse, NutritionAnalysis, MealPlan } from '$lib/types/ai-schemas';
+
 export interface PeruvianDish {
   id: string;
   name: string;
@@ -541,3 +543,398 @@ export function buildPeruvianCulinaryContextForChef(ingredientsText: string): st
 
   return context;
 }
+
+/**
+ * Motor Gastronómico Peruano Autónomo:
+ * Genera recetas peruanas completas, detalladas y personalizadas a partir del catálogo
+ * y de los ingredientes exactos ingresados por el usuario.
+ */
+export function generateSmartPeruvianRecipes(ingredientsInput: string): RecipesResponse {
+  const { detectedIngredients, normalizedText } = normalizePeruvianIngredients(ingredientsInput || 'pollo, arroz, tomate, cebolla');
+  const matches = matchPeruvianDishes(ingredientsInput, 3);
+  const wantsFit = /fit|bajo en grasa|proteína|air fryer|saludable/i.test(ingredientsInput);
+
+  // Extraer ingredientes escritos libremente por el usuario
+  const rawTokens = (ingredientsInput.split('.')[0] || '')
+    .replace(/^Ingredientes:\s*/i, '')
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1);
+
+  const recipes: RecipesResponse['recipes'] = [];
+
+  for (const m of matches) {
+    const d = m.dish;
+    const baseIngredients = [
+      ...d.coreIngredients.map((ing) => `Porción de ${ing} fresco`),
+      ...m.matchedSecondary.map((ing) => `${ing} al gusto`),
+      '1 cebolla roja picada en brunoise (para el aderezo)',
+      '2 dientes de ajo molidos',
+      'Sal, pimienta y comino al gusto'
+    ];
+
+    const missing = d.secondaryIngredients
+      .filter((sec) => !m.matchedSecondary.includes(sec) && !normalizedText.includes(sec))
+      .slice(0, 4);
+
+    const steps = [
+      `Prepara tu mise en place lavando y cortando los ingredientes principales (${d.coreIngredients.join(', ')}).`,
+      `En una olla o sartén caliente con un hilo de aceite, prepara el aderezo base peruano sofriendo la cebolla roja y el ajo durante 4 minutos hasta que estén transparentes.`,
+      d.aderezoTechnique,
+      wantsFit
+        ? `Adaptación Fit activa: ${d.fitAdaptation}`
+        : `Cocina a fuego medio controlando el punto de sal y humedad para que los sabores criollos se concentren.`,
+      `Sirve caliente decorando con hierbas frescas picadas y acompaña con rodajas de limón peruano o zarza criolla.`
+    ];
+
+    recipes.push({
+      name: wantsFit ? `${d.name} (Versión Fit Peruana)` : d.name,
+      prepTime: d.prepTime,
+      ingredients: [...new Set(baseIngredients)],
+      instructions: steps,
+      missingIngredients: missing
+    });
+
+    // Si solo había 1 o 2 coincidencias, agregar también su variante Fit o Saltado Criollo
+    if (matches.length === 1) {
+      recipes.push({
+        name: `${d.name} — Edición Ligera & Alta en Proteína`,
+        prepTime: '20 min',
+        ingredients: [
+          ...d.coreIngredients.map((ing) => `${ing} (porción controlada magra)`),
+          '1 cucharadita de aceite de oliva',
+          'Cebolla roja, ajo y ají amarillo sin venas',
+          'Jugo de limón peruano y culantro fresco'
+        ],
+        instructions: [
+          d.fitAdaptation,
+          `Dora la proteína en sartén antiadherente o Air Fryer con sal, ajo y comino.`,
+          `Saltea ligeramente las verduras para conservar su textura crocante y sus vitaminas.`,
+          `Integra con el aderezo peruano bajo en grasa y sirve con ensalada fresca.`
+        ],
+        missingIngredients: missing.slice(0, 3)
+      });
+    }
+  }
+
+  // Si el usuario escribió ingredientes muy particulares y faltan recetas para llegar a 3,
+  // sintetizar recetas criollas/caseras con sus ingredientes exactos
+  const userItems = rawTokens.length > 0 ? rawTokens : detectedIngredients.length > 0 ? detectedIngredients : ['huevos', 'tomate', 'cebolla'];
+
+  if (recipes.length < 3) {
+    recipes.push({
+      name: `Saltado Criollo al Wok de ${userItems.slice(0, 3).join(', ')}`,
+      prepTime: '18 min',
+      ingredients: [
+        ...userItems.map((i) => `${i} cortado en trozos medianos`),
+        '1 cebolla roja en gajos gruesos',
+        '1 tomate en gajos',
+        '1 chorrito de sillao y gotas de vinagre',
+        'Ajo picado, culantro fresco, sal y pimienta'
+      ],
+      instructions: [
+        `Calienta una sartén amplia o wok a fuego alto con una cucharadita de aceite.`,
+        `Saltea primero los ingredientes principales (${userItems.join(', ')}) con el ajo picado para sellar los jugos y lograr el aroma ahumado peruano.`,
+        `Incorpora la cebolla roja en gajos y el tomate por 2 minutos manteniendo su textura firme.`,
+        `Desglasa con un chorrito de sillao y unas gotas de vinagre; espolvorea culantro recién picado y sirve al instante.`
+      ],
+      missingIngredients: ['sillao', 'ají amarillo', 'culantro']
+    });
+  }
+
+  if (recipes.length < 3) {
+    recipes.push({
+      name: `Torrejitas / Revuelto Casero Peruano de ${userItems.slice(0, 2).join(' y ')}`,
+      prepTime: '15 min',
+      ingredients: [
+        ...userItems.map((i) => `${i} finamente picado`),
+        '2 huevos batidos',
+        '1/2 cebolla roja picada en cuadritos',
+        'Culantro o cebolla china picada al gusto',
+        'Sal, pimienta y pizca de orégano'
+      ],
+      instructions: [
+        `Pica finamente tus ingredientes (${userItems.join(', ')}) junto con la cebolla y las hierbas frescas.`,
+        `Sofríe ligeramente en sartén antiadherente durante 3 minutos con una pizca de ajo y orégano estrujado.`,
+        `Vierte los huevos batidos sazonados y cocina a fuego medio-bajo hasta que cuaje de forma jugosa y dorada.`,
+        `Sirve caliente acompañado de rodajas de palta, pan o ensalada fresca.`
+      ],
+      missingIngredients: ['cebolla china', 'palta', 'queso fresco']
+    });
+  }
+
+  return { recipes: recipes.slice(0, 3) };
+}
+
+/**
+ * Análisis nutricional inteligente de respaldo con contexto peruano para /nutri
+ */
+export function generateSmartPeruvianPlateAnalysis(): NutritionAnalysis {
+  return {
+    dishName: 'Plato Casero Peruano Balanceado (Arroz con Pollo / Guiso Criollo)',
+    estimatedCalories: 510,
+    macronutrients: {
+      protein: 34,
+      carbs: 52,
+      fat: 14,
+      fiber: 6
+    },
+    healthScore: 8,
+    verdict:
+      'Excelente aporte de proteínas de alto valor biológico junto con carbohidratos complejos y micronutrientes del aderezo peruano (culantro, espinaca, ají amarillo y cebolla roja).',
+    suggestions: [
+      'Acompaña con una porción generosa de zarza criolla (cebolla, tomate y limón) para sumar antioxidantes y vitamina C.',
+      'Controla la porción de arroz a media taza si el plato ya incluye papa o choclo para evitar el doble carbohidrato.',
+      'Prefiere cortes magros como pechuga de pollo, lomo fino o pescado fresco del día.'
+    ],
+    ingredients: [
+      'Proteína principal (pollo/res/pescado)',
+      'Arroz graneado',
+      'Aderezo criollo (cebolla, ajo, ají amarillo)',
+      'Vegetales frescos (culantro, espinaca, tomate)'
+    ]
+  };
+}
+
+/**
+ * Plan semanal completo de 7 días de gastronomía peruana saludable para /plan
+ */
+export function generateSmartPeruvianWeeklyPlan(
+  preferences?: string,
+  dietaryRestrictions?: string
+): MealPlan {
+  const isLowCal = /déficit|bajar|perder|fit/i.test(preferences || '');
+  const calFactor = isLowCal ? 0.9 : 1;
+  const scale = (c: number) => Math.round(c * calFactor);
+
+  const days: MealPlan['weeklyPlan'] = [
+    {
+      day: 'Lunes',
+      meals: {
+        breakfast: {
+          name: 'Pan integral con Palta Fuerte y Huevos Revueltos a la Criolla',
+          calories: scale(360),
+          ingredients: ['2 huevos', '1/2 palta fuerte', '1 tomate picado', '1 pan integral o francés'],
+          instructions: 'Revuelve los huevos con tomate y cebolla picada; sirve con láminas de palta y limón.'
+        },
+        lunch: {
+          name: 'Lentejitas de Lunes con Filete de Pescado a la Plancha y Zarza Criolla',
+          calories: scale(540),
+          ingredients: ['1 taza de lentejas guisadas', '150g filete de pescado', '1/2 taza de arroz', 'Cebolla y limón'],
+          instructions: 'Guisa las lentejas con aderezo de cebolla y ajo; acompaña con pescado dorado y ensalada de cebolla con limón para absorber el hierro.'
+        },
+        dinner: {
+          name: 'Crema Reconfortante de Zapallo Macre con Queso Fresco',
+          calories: scale(340),
+          ingredients: ['250g de zapallo macre', '1 papa amarilla pequeña', '50g de queso fresco', 'Huacatay y orégano'],
+          instructions: 'Hierve el zapallo y la papa con rama de huacatay, licúa y sirve con dados de queso fresco.'
+        }
+      },
+      totalCalories: scale(1240)
+    },
+    {
+      day: 'Martes',
+      meals: {
+        breakfast: {
+          name: 'Avena con Quinua Perlada, Manzana y Canela',
+          calories: scale(350),
+          ingredients: ['1/2 taza de avena', '2 cdas de quinua cocida', '1 manzana picada', 'Canela y clavo'],
+          instructions: 'Cocina la avena con quinua, manzana en cubitos y canela durante 8 minutos.'
+        },
+        lunch: {
+          name: 'Arroz con Pollo Peruano Fit (con abundante Espinaca y Culantro)',
+          calories: scale(560),
+          ingredients: ['150g pechuga de pollo', '1/2 taza de arroz', 'Culantro y espinaca licuados', 'Alverjitas, zanahoria y pimiento'],
+          instructions: 'Sella la pechuga, haz el aderezo de cebolla, ajo y ají amarillo, agrega el licuado verde y granea con las verduras.'
+        },
+        dinner: {
+          name: 'Palta Rellena con Pollo Deshilachado y Verduras',
+          calories: scale(350),
+          ingredients: ['1 palta fuerte', '100g pechuga de pollo deshilachada', 'Zanahoria y vainitas', 'Yogurt griego y limón'],
+          instructions: 'Mezcla el pollo con las verduras cocidas al dente y yogurt con limón; rellena la palta.'
+        }
+      },
+      totalCalories: scale(1260)
+    },
+    {
+      day: 'Miércoles',
+      meals: {
+        breakfast: {
+          name: 'Tortilla Verde de Espinaca y Queso Fresco con Camote al Horno',
+          calories: scale(370),
+          ingredients: ['2 huevos', '1 taza de espinaca', '40g queso fresco', '1 camote mediano sancochado'],
+          instructions: 'Bate los huevos con espinaca picada y queso fresco, dora en sartén y acompaña con rodajas de camote.'
+        },
+        lunch: {
+          name: 'Lomo Saltado Saludable al Wok con Papas en Air Fryer',
+          calories: scale(570),
+          ingredients: ['150g lomo de res magro', '1 cebolla roja', '1 tomate', '1 papa amarilla', 'Sillao y culantro'],
+          instructions: 'Dora las papas en Air Fryer; saltea la carne a fuego alto con cebolla, ají amarillo, tomate y sillao.'
+        },
+        dinner: {
+          name: 'Aguadito Ligero de Pollo y Verduras',
+          calories: scale(360),
+          ingredients: ['120g pechuga de pollo', 'Culantro y espinaca', '1/4 taza de arroz', 'Alverjitas y pimiento'],
+          instructions: 'Hierve el caldo con aderezo verde de culantro y espinaca, pollo en trozos y verduras.'
+        }
+      },
+      totalCalories: scale(1300)
+    },
+    {
+      day: 'Jueves',
+      meals: {
+        breakfast: {
+          name: 'Sánguche de Pollo Deshilachado con Palta y Tomate',
+          calories: scale(360),
+          ingredients: ['100g pechuga deshilachada', '1/3 palta', 'Rodajas de tomate', 'Pan integral'],
+          instructions: 'Arma el sánguche con pollo jugoso, láminas de palta, tomate y gotas de limón.'
+        },
+        lunch: {
+          name: 'Chaufa de Quinua con Pollo, Huevo y Cebolla China',
+          calories: scale(520),
+          ingredients: ['1 taza de quinua cocida graneada', '150g pollo en cubos', '1 huevo', 'Cebolla china, kión y sillao'],
+          instructions: 'Saltea el pollo con kión, agrega tortilla de huevo picada, la quinua graneada, sillao y abundante cebolla china.'
+        },
+        dinner: {
+          name: 'Solterito Arequipeño de Queso Fresco, Choclo y Habas',
+          calories: scale(340),
+          ingredients: ['80g queso fresco en cubos', '1/2 taza de choclo', '1/2 taza de habas', 'Tomate, cebolla y perejil'],
+          instructions: 'Combina todos los ingredientes frescos y aliña con limón peruano y aceite de oliva.'
+        }
+      },
+      totalCalories: scale(1220)
+    },
+    {
+      day: 'Viernes',
+      meals: {
+        breakfast: {
+          name: 'Bowl de Yogurt Griego con Plátano de Seda, Quinua Pop y Pecanas',
+          calories: scale(350),
+          ingredients: ['1 taza de yogurt griego', '1 plátano de seda', '2 cdas de quinua pop o avena', 'Pecanas picadas'],
+          instructions: 'Sirve el yogurt con rodajas de plátano, quinua y pecanas.'
+        },
+        lunch: {
+          name: 'Ceviche Clásico de Pescado Fresco con Camote y Choclo',
+          calories: scale(490),
+          ingredients: ['180g pescado blanco en cubos', '5 limones peruanos', 'Cebolla roja y culantro', '1 camote y 1/2 choclo'],
+          instructions: 'Marina el pescado al momento con sal, limón, ají limo y culantro; acompaña con cebolla en pluma, camote y choclo.'
+        },
+        dinner: {
+          name: 'Saltado de Vainitas y Brócoli con Tiras de Pollo',
+          calories: scale(360),
+          ingredients: ['130g pechuga de pollo', '1 taza de vainitas y brócoli', 'Cebolla y tomate', 'Sillao y ajo'],
+          instructions: 'Saltea el pollo con ajo y kión, incorpora las vainitas y el brócoli al dente con tomate y sillao.'
+        }
+      },
+      totalCalories: scale(1200)
+    },
+    {
+      day: 'Sábado',
+      meals: {
+        breakfast: {
+          name: 'Sangrecita Criolla con Yuca Sancochada (Alto en Hierro)',
+          calories: scale(380),
+          ingredients: ['120g sangrecita de pollo', 'Cebolla china y hierbabuena', 'Cebolla roja y ají amarillo', '1 trozo de yuca'],
+          instructions: 'Saltea la sangrecita con aderezo de cebolla, ajo, ají amarillo, hierbabuena y cebolla china; sirve con yuca.'
+        },
+        lunch: {
+          name: 'Ají de Pollo Saludable (espesado con Quinua y Queso Fresco)',
+          calories: scale(550),
+          ingredients: ['150g pechuga deshilachada', 'Pasta de ají amarillo', 'Queso fresco y leche light', '1 papa amarilla y 1/2 huevo'],
+          instructions: 'Prepara el aderezo de cebolla, ajo y ají amarillo; licúa con queso fresco y leche, incorpora el pollo deshilachado y sirve sobre papa.'
+        },
+        dinner: {
+          name: 'Sudado Ligero de Pescado al Vapor con Tomate y Culantro',
+          calories: scale(340),
+          ingredients: ['150g filete de pescado', '2 tomates en gajos', '1 cebolla roja', 'Culantro, kión y ajo'],
+          instructions: 'Cocina el pescado a fuego lento sobre cama de tomate, cebolla, kión y culantro en su propio jugo.'
+        }
+      },
+      totalCalories: scale(1270)
+    },
+    {
+      day: 'Domingo',
+      meals: {
+        breakfast: {
+          name: 'Panqueques de Avena y Plátano con Frutas de Estación',
+          calories: scale(370),
+          ingredients: ['1/2 taza de avena', '1 plátano maduro', '2 huevos', 'Canela en polvo'],
+          instructions: 'Licúa la avena, el plátano, los huevos y la canela; dora en sartén antiadherente por ambos lados.'
+        },
+        lunch: {
+          name: 'Tallarines Verdes Fit de Espinaca y Albahaca con Filete de Pollo',
+          calories: scale(580),
+          ingredients: ['80g tallarines', '2 tazas de espinaca y albahaca', '50g queso fresco', '150g pechuga a la plancha'],
+          instructions: 'Licúa la espinaca y albahaca blanqueadas con queso fresco y leche; mezcla con los fideos y corona con el pollo dorado.'
+        },
+        dinner: {
+          name: 'Causa Limeña Ligera de Atún y Palta',
+          calories: scale(350),
+          ingredients: ['2 papas amarillas prensadas', 'Limón y ají amarillo', '1 lata de atún al agua', '1/3 palta fuerte'],
+          instructions: 'Amasa la papa con limón y ají amarillo; rellena con atún mezclado con yogurt griego y láminas de palta.'
+        }
+      },
+      totalCalories: scale(1300)
+    }
+  ];
+
+  const totalWeekly = days.reduce((acc, d) => acc + d.totalCalories, 0);
+
+  return {
+    weeklyPlan: days,
+    shoppingList: {
+      proteins: [
+        'Pechuga de pollo 1.2 kg',
+        'Filete de pescado blanco 600g',
+        'Lomo de res magro 250g',
+        'Huevos 15 unidades',
+        'Atún en agua 1 lata',
+        'Sangrecita 150g'
+      ],
+      vegetables: [
+        'Culantro fresco 2 atados',
+        'Espinaca y albahaca 2 atados',
+        'Ají amarillo 6 unidades',
+        'Cebolla roja 1 kg',
+        'Tomates 1 kg',
+        'Cebolla china y hierbabuena 1 atado',
+        'Vainitas, brócoli, zanahoria y alverjitas',
+        'Zapallo macre 300g'
+      ],
+      grains: [
+        'Quinua perlada 500g',
+        'Arroz 1 kg',
+        'Lentejas 500g',
+        'Avena 500g',
+        'Papa amarilla 1 kg',
+        'Camote y yuca 1 kg',
+        'Choclo 2 unidades'
+      ],
+      dairy: [
+        'Queso fresco peruano 350g',
+        'Yogurt griego natural 500g',
+        'Leche evaporada light 1 tarro'
+      ],
+      fruits: [
+        'Palta fuerte 4 unidades',
+        'Limón peruano 500g',
+        'Plátano de seda 1 mano',
+        'Manzanas 4 unidades'
+      ],
+      other: [
+        'Aceite de oliva',
+        'Sillao (salsa de soya)',
+        'Kión (jengibre) y ajo',
+        `Nota: Adaptado a ${dietaryRestrictions || 'cocina peruana saludable'}`
+      ]
+    },
+    weeklyNutrition: {
+      totalCalories: totalWeekly,
+      averageDailyCalories: Math.round(totalWeekly / 7),
+      proteinPercentage: 32,
+      carbsPercentage: 43,
+      fatPercentage: 25
+    }
+  };
+}
+
